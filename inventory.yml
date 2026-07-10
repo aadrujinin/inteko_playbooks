@@ -5,8 +5,19 @@ all:
         windows-host-1:
           ansible_host: 192.168.1.133
           ansible_user: tech6
-          ansible_password: "Lhe;byby1985$"
+          ansible_password: "d1we50A@!985"
           ansible_connection: winrm
           ansible_port: 5985
-          ansible_winrm_transport: basic          # попробуйте basic, если ntlm не работает
-          ansible_winrm_server_cert_validation: basic
+          ansible_winrm_transport: basic
+          ansible_winrm_server_cert_validation: ignore
+          ansible_winrm_scheme: http
+        windows-host-2:
+          ansible_host: 192.168.1.57
+          ansible_user: tech
+          ansible_password: "b@vt5R@b"
+          ansible_connection: winrm
+          ansible_port: 5985
+          ansible_winrm_transport: basic
+          ansible_winrm_server_cert_validation: ignore
+          ansible_winrm_scheme: http
+          
