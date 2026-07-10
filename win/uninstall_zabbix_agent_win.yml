@@ -30,6 +30,19 @@
         state: absent
       ignore_errors: yes
 
+    # 2.5. Очистка EventLog registry key
+    - name: Remove EventLog registry key for Zabbix Agent 2
+      ansible.windows.win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Application\Zabbix Agent 2
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove EventLog registry key for Zabbix Agent
+      ansible.windows.win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Application\Zabbix Agent
+        state: absent
+      ignore_errors: yes
+
     # 3. Удаление каталогов установки
     - name: Delete Zabbix Agent 2 installation directory
       ansible.windows.win_file:

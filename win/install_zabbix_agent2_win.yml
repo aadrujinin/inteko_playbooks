@@ -54,6 +54,15 @@
       when: service_info.exists
 
     # ================================================================
+    # 1.5. Очистка EventLog registry key (мешает MSI)
+    # ================================================================
+    - name: Remove stale EventLog registry key for Zabbix Agent 2
+      ansible.windows.win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\Application\Zabbix Agent 2
+        state: absent
+      ignore_errors: yes
+
+    # ================================================================
     # 2. Скачивание и установка MSI
     # ================================================================
     - name: Ensure Downloads directory exists
