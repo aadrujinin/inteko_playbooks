@@ -54,7 +54,36 @@
       when: service_info.exists
 
     # ----------------------------------------------------------------
-    # Основная установка
+    # Подготовка конфигурации ДО установки
+    # ----------------------------------------------------------------
+    - name: Ensure agent directory exists
+      ansible.windows.win_file:
+        path: "{{ agent_dir }}"
+        state: directory
+
+    - name: Ensure scripts directory exists
+      ansible.windows.win_file:
+        path: "{{ agent_dir }}\\scripts"
+        state: directory
+
+    - name: Copy zabbix_agent2.conf from repository
+      ansible.windows.win_copy:
+        src: "{{ playbook_dir }}/Zabbix Agent 2/zabbix_agent2.conf"
+        dest: "{{ agent_dir }}\\zabbix_agent2.conf"
+        force: yes
+      register: config_download
+      ignore_errors: yes
+
+    - name: Copy get_metadata.bat from repository
+      ansible.windows.win_copy:
+        src: "{{ playbook_dir }}/Zabbix Agent 2/get_metadata.bat"
+        dest: "{{ agent_dir }}\\scripts\\get_metadata.bat"
+        force: yes
+      register: script_download
+      ignore_errors: yes
+
+    # ----------------------------------------------------------------
+    # Основная установка MSI
     # ----------------------------------------------------------------
     - name: Ensure Downloads directory exists
       ansible.windows.win_file:
@@ -81,47 +110,31 @@
       register: install_result
 
     # ----------------------------------------------------------------
-    # Копирование конфигурации и скриптов
+    # Проверка и создание службы, если она не появилась
     # ----------------------------------------------------------------
-    - name: Ensure scripts directory exists
-      ansible.windows.win_file:
-        path: "{{ agent_dir }}\\scripts"
-        state: directory
-
-    - name: Copy zabbix_agent2.conf from repository
-      ansible.windows.win_copy:
-        src: "{{ playbook_dir }}/Zabbix Agent 2/zabbix_agent2.conf"
-        dest: "{{ agent_dir }}\\zabbix_agent2.conf"
-        force: yes
-      register: config_download
-      ignore_errors: yes
-
-    - name: Copy get_metadata.bat from repository
-      ansible.windows.win_copy:
-        src: "{{ playbook_dir }}/Zabbix Agent 2/get_metadata.bat"
-        dest: "{{ agent_dir }}\\scripts\\get_metadata.bat"
-        force: yes
-      register: script_download
-      ignore_errors: yes
-
-    # ----------------------------------------------------------------
-    # Запуск службы (если конфиг или скрипт изменились)
-    # ----------------------------------------------------------------
-    - name: Restart Zabbix Agent 2 service if config changed
+    - name: Check if service exists after installation
       ansible.windows.win_service:
         name: "{{ service_name }}"
-        state: restarted
-      when: 
-        - (config_download is defined and config_download.changed) or
-          (script_download is defined and script_download.changed)
-      ignore_errors: yes   # если служба ещё не создана – пропускаем
+      register: service_after_install
+      ignore_errors: yes
 
-    - name: Ensure Zabbix Agent 2 service is started
+    - name: Create service manually if not exists
+      ansible.windows.win_service:
+        name: "{{ service_name }}"
+        path: "{{ agent_dir }}\\zabbix_agent2.exe"
+        display_name: "Zabbix Agent 2"
+        state: started
+        start_mode: auto
+      when: not service_after_install.exists
+      ignore_errors: yes
+      register: service_creation
+
+    - name: Ensure service is started (if already exists)
       ansible.windows.win_service:
         name: "{{ service_name }}"
         state: started
         start_mode: auto
-      register: start_result
+      when: service_after_install.exists
       ignore_errors: yes
 
     - name: Check service status
