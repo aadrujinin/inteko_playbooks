@@ -13,30 +13,71 @@
     msi_filename: "zabbix_agent2-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
     msi_full_path: "{{ download_dir }}\\{{ msi_filename }}"
     agent_dir: "C:\\Program Files\\Zabbix Agent 2"
+    service_name: "Zabbix Agent 2"
 
   tasks:
-    # 1. Удаляем службу (если она существует), чтобы избежать проблем с "помечено на удаление"
-    - name: Remove existing Zabbix Agent 2 service if present
+    # -----------------------------------------------------------------
+    # Блок очистки старой службы и перезагрузки при необходимости
+    # -----------------------------------------------------------------
+    - name: Check if Zabbix Agent 2 service exists
       ansible.windows.win_service:
-        name: "Zabbix Agent 2"
-        state: absent
-      ignore_errors: yes
-      register: remove_service
-
-    # 2. Удаляем старый каталог установки (если есть)
-    - name: Delete old Zabbix Agent 2 directory
-      ansible.windows.win_file:
-        path: "{{ agent_dir }}"
-        state: absent
+        name: "{{ service_name }}"
+      register: service_info
       ignore_errors: yes
 
-    # 3. Создаем папку для скачивания
+    - name: Stop service if exists
+      ansible.windows.win_service:
+        name: "{{ service_name }}"
+        state: stopped
+      when: service_info.exists
+      ignore_errors: yes
+
+    - name: Attempt to remove service using win_service
+      ansible.windows.win_service:
+        name: "{{ service_name }}"
+        state: absent
+      when: service_info.exists
+      register: remove_result
+      ignore_errors: yes
+
+    - name: If removal failed, force delete via sc command
+      ansible.windows.win_command: 'sc delete "{{ service_name }}"'
+      when: 
+        - service_info.exists
+        - remove_result is failed or remove_result.changed == false
+      ignore_errors: yes
+      register: sc_delete
+
+    - name: Check if service is still in pending delete state
+      ansible.windows.win_command: 'sc query "{{ service_name }}"'
+      when: service_info.exists
+      register: sc_query
+      ignore_errors: yes
+
+    - name: Reboot host if service is marked for deletion (Win32 1072)
+      ansible.windows.win_reboot:
+        reboot_timeout: 300
+        post_reboot_delay: 30
+      when: 
+        - sc_query.stdout is search('1072') or sc_query.stderr is search('1072')
+        - service_info.exists
+      register: reboot_done
+
+    - name: Wait for service to be fully gone after reboot
+      ansible.windows.win_service:
+        name: "{{ service_name }}"
+      register: service_after_reboot
+      when: reboot_done.changed
+      ignore_errors: yes
+
+    # -----------------------------------------------------------------
+    # Основная установка
+    # -----------------------------------------------------------------
     - name: Ensure Downloads directory exists
       ansible.windows.win_file:
         path: "{{ download_dir }}"
         state: directory
 
-    # 4. Скачиваем MSI
     - name: Download Zabbix Agent 2 MSI
       ansible.windows.win_get_url:
         url: "{{ zabbix_msi_url }}"
@@ -44,7 +85,6 @@
         timeout: 60
         force: yes
 
-    # 5. Устанавливаем MSI
     - name: Install Zabbix Agent 2 using win_package
       ansible.windows.win_package:
         path: "{{ msi_full_path }}"
@@ -57,7 +97,14 @@
         state: present
       register: install_result
 
-    # 6. Копируем конфиг из репозитория (используйте win_copy, если файл локально доступен)
+    # -----------------------------------------------------------------
+    # Копирование конфигурации и скриптов
+    # -----------------------------------------------------------------
+    - name: Ensure scripts directory exists
+      ansible.windows.win_file:
+        path: "{{ agent_dir }}\\scripts"
+        state: directory
+
     - name: Copy zabbix_agent2.conf from repository
       ansible.windows.win_copy:
         src: "win/Zabbix Agent 2/zabbix_agent2.conf"
@@ -66,7 +113,6 @@
       register: config_download
       ignore_errors: yes
 
-    # 7. Копируем скрипт get_metadata.bat
     - name: Copy get_metadata.bat from repository
       ansible.windows.win_copy:
         src: "win/Zabbix Agent 2/get_metadata.bat"
@@ -75,26 +121,22 @@
       register: script_download
       ignore_errors: yes
 
-    # 8. Перезапускаем службу (если конфиг или скрипт изменились)
-    - name: Restart Zabbix Agent 2 service
+    - name: Restart Zabbix Agent 2 service if config changed
       ansible.windows.win_service:
-        name: "Zabbix Agent 2"
+        name: "{{ service_name }}"
         state: restarted
       when: (config_download is defined and config_download.changed) or
             (script_download is defined and script_download.changed)
 
-    # 9. Проверяем состояние службы (безопасно)
     - name: Check service status
       ansible.windows.win_service:
-        name: "Zabbix Agent 2"
+        name: "{{ service_name }}"
       register: service_status
 
-    # 10. Выводим состояние (с защитой от отсутствия поля state)
     - name: Show service state
       debug:
         msg: "Service state: {{ service_status.state | default('unknown') }}"
 
-    # 11. Если служба не запущена – завершаем с ошибкой
     - name: Fail if service is not running
       fail:
         msg: "Zabbix Agent 2 service is not running"
