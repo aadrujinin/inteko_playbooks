@@ -87,21 +87,28 @@
       debug:
         msg: "MSI file size: {{ msi_stat.stat.size }} bytes"
 
-    - name: Install Zabbix Agent 2 using win_package
+    - name: Uninstall old registration if exists (to force reinstall)
       ansible.windows.win_package:
         path: "{{ msi_full_path }}"
-        arguments:
-          - "SERVER={{ zabbix_server }}"
-          - "SERVERACTIVE={{ zabbix_server_active }}"
-          - "HOSTNAME={{ zabbix_hostname }}"
-          - "REBOOT=ReallySuppress"
-          - "ALLUSERS=1"
-        state: present
+        state: absent
+      register: uninstall_before
+      ignore_errors: yes
+
+    - name: Install Zabbix Agent 2 using msiexec
+      ansible.windows.win_command: 'msiexec /i "{{ msi_full_path }}" SERVER={{ zabbix_server }} SERVERACTIVE={{ zabbix_server_active }} HOSTNAME={{ zabbix_hostname }} REBOOT=ReallySuppress ALLUSERS=1 /qn /l*v "{{ download_dir }}\\zabbix_install.log"'
       register: install_result
 
     - name: Debug install result
       debug:
-        msg: "Install changed: {{ install_result.changed | default('unknown') }}"
+        msg: "Install rc: {{ install_result.rc }}"
+
+    - name: Debug install stdout
+      debug:
+        msg: "{{ install_result.stdout | default('') }}"
+
+    - name: Debug install stderr
+      debug:
+        msg: "{{ install_result.stderr | default('') }}"
 
     # ================================================================
     # 3. Поиск zabbix_agent2.exe
