@@ -16,9 +16,9 @@
     service_name: "Zabbix Agent 2"
 
   tasks:
-    # ----------------------------------------------------------------
-    # 1. Очистка старой службы (с перезагрузкой при необходимости)
-    # ----------------------------------------------------------------
+    # ================================================================
+    # 1. Очистка старой службы
+    # ================================================================
     - name: Check if Zabbix Agent 2 service exists
       ansible.windows.win_service:
         name: "{{ service_name }}"
@@ -42,7 +42,7 @@
 
     - name: Force delete service via sc if needed
       ansible.windows.win_command: 'sc delete "{{ service_name }}"'
-      when: 
+      when:
         - service_info.exists
         - remove_attempt is failed or not remove_attempt.changed
       ignore_errors: yes
@@ -53,9 +53,9 @@
         post_reboot_delay: 30
       when: service_info.exists
 
-    # ----------------------------------------------------------------
+    # ================================================================
     # 2. Скачивание и установка MSI
-    # ----------------------------------------------------------------
+    # ================================================================
     - name: Ensure Downloads directory exists
       ansible.windows.win_file:
         path: "{{ download_dir }}"
@@ -65,8 +65,27 @@
       ansible.windows.win_get_url:
         url: "{{ zabbix_msi_url }}"
         dest: "{{ msi_full_path }}"
-        timeout: 60
+        timeout: 300
         force: yes
+      register: download_result
+
+    - name: Debug download result
+      debug:
+        msg: "Download status: {{ download_result.msg | default('unknown') }}"
+
+    - name: Check MSI file exists after download
+      ansible.windows.win_stat:
+        path: "{{ msi_full_path }}"
+      register: msi_stat
+
+    - name: Fail if MSI not downloaded
+      fail:
+        msg: "MSI file not found at {{ msi_full_path }}. Download may have failed."
+      when: not msi_stat.stat.exists or msi_stat.stat.size == 0
+
+    - name: Debug MSI file size
+      debug:
+        msg: "MSI file size: {{ msi_stat.stat.size }} bytes"
 
     - name: Install Zabbix Agent 2 using win_package
       ansible.windows.win_package:
@@ -80,51 +99,59 @@
         state: present
       register: install_result
 
-    # ----------------------------------------------------------------
-    # 3. Копирование конфигурации и скриптов (после установки)
-    # ----------------------------------------------------------------
-    - name: Ensure agent directory exists
-      ansible.windows.win_file:
-        path: "{{ agent_dir }}"
-        state: directory
+    - name: Debug install result
+      debug:
+        msg: "Install changed: {{ install_result.changed | default('unknown') }}"
 
+    # ================================================================
+    # 3. Поиск zabbix_agent2.exe (MSI может ставить в другой путь)
+    # ================================================================
+    - name: Find zabbix_agent2.exe on the system
+      ansible.windows.win_find:
+        paths:
+          - "C:\\Program Files"
+          - "C:\\Program Files (x86)"
+        patterns:
+          - "zabbix_agent2.exe"
+        recurse: yes
+      register: find_result
+
+    - name: Debug found exe paths
+      debug:
+        msg: "Found exe: {{ find_result.files | map(attribute='path') | list }}"
+
+    - name: Fail if executable not found anywhere
+      fail:
+        msg: "zabbix_agent2.exe not found. Download URL: {{ zabbix_msi_url }}"
+      when: find_result.files | length == 0
+
+    - name: Set agent_dir to found path
+      set_fact:
+        agent_dir: "{{ find_result.files[0].path | dirname }}"
+
+    # ================================================================
+    # 4. Копирование конфигурации и скриптов
+    # ================================================================
     - name: Ensure scripts directory exists
       ansible.windows.win_file:
         path: "{{ agent_dir }}\\scripts"
         state: directory
 
-    - name: Copy zabbix_agent2.conf from repository
+    - name: Copy zabbix_agent2.conf
       ansible.windows.win_copy:
         src: "{{ playbook_dir }}/Zabbix Agent 2/zabbix_agent2.conf"
         dest: "{{ agent_dir }}\\zabbix_agent2.conf"
         force: yes
-      register: config_download
-      ignore_errors: yes
 
-    - name: Copy get_metadata.bat from repository
+    - name: Copy scripts folder contents
       ansible.windows.win_copy:
-        src: "{{ playbook_dir }}/Zabbix Agent 2/get_metadata.bat"
-        dest: "{{ agent_dir }}\\scripts\\get_metadata.bat"
+        src: "{{ playbook_dir }}/Zabbix Agent 2/scripts/"
+        dest: "{{ agent_dir }}\\scripts"
         force: yes
-      register: script_download
-      ignore_errors: yes
 
-    # ----------------------------------------------------------------
-    # 4. Проверка наличия исполняемого файла
-    # ----------------------------------------------------------------
-    - name: Check if zabbix_agent2.exe exists
-      ansible.windows.win_stat:
-        path: "{{ agent_dir }}\\zabbix_agent2.exe"
-      register: exe_stat
-
-    - name: Fail if executable not found
-      fail:
-        msg: "zabbix_agent2.exe not found in {{ agent_dir }}. Installation may have failed."
-      when: not exe_stat.stat.exists
-
-    # ----------------------------------------------------------------
+    # ================================================================
     # 5. Создание/запуск службы
-    # ----------------------------------------------------------------
+    # ================================================================
     - name: Check if service exists after installation
       ansible.windows.win_service:
         name: "{{ service_name }}"
@@ -142,7 +169,7 @@
       register: service_creation
       ignore_errors: yes
 
-    - name: Start service (if created or already exists)
+    - name: Start service
       ansible.windows.win_service:
         name: "{{ service_name }}"
         state: started
@@ -155,9 +182,9 @@
       when: start_result is defined and start_result.failed
       ignore_errors: yes
 
-    # ----------------------------------------------------------------
+    # ================================================================
     # 6. Финальная проверка
-    # ----------------------------------------------------------------
+    # ================================================================
     - name: Check service status
       ansible.windows.win_service:
         name: "{{ service_name }}"
