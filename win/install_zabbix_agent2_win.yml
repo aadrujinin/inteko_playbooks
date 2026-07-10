@@ -1,18 +1,57 @@
+# ---
+# - name: Install Zabbix Agent 2 on Windows
+  # hosts: windows_servers
+  # gather_facts: true
+
+  # vars:
+    # zabbix_agent_server: "192.168.1.172"
+    # zabbix_agent_server_active: "192.168.1.172"
+    # zabbix_agent_hostname: "{{ inventory_hostname }}"
+    # zabbix_win_config_name: "zabbix_agent2.conf"
+    # # Подавляем запрос перезагрузки
+    # # Для отладки раскомментируйте строку ниже (с одинарными кавычками):
+    # zabbix_agent_win_install_options: '/lv* C:\zabbix_install.log REBOOT=ReallySuppress'
+
+  # tasks:
+    # - name: Install Zabbix Agent 2
+      # ansible.builtin.include_role:
+        # name: community.zabbix.zabbix_agent
 ---
-- name: Install Zabbix Agent 2 on Windows
+- name: Install Zabbix Agent 2 on Windows (via win_package)
   hosts: windows_servers
   gather_facts: true
 
   vars:
-    zabbix_agent_server: "192.168.1.172"
-    zabbix_agent_server_active: "192.168.1.172"
-    zabbix_agent_hostname: "{{ inventory_hostname }}"
-    zabbix_win_config_name: "zabbix_agent2.conf"
-    # Подавляем запрос перезагрузки
-    # Для отладки раскомментируйте строку ниже (с одинарными кавычками):
-    zabbix_agent_win_install_options: '/lv* C:\zabbix_install.log REBOOT=ReallySuppress'
+    # --- Настройки Zabbix-сервера ---
+    zabbix_server: "192.168.1.172"                # IP вашего Zabbix-сервера
+    zabbix_agent_version: "7.4.12"                # версия агента
+    # URL для скачивания (для Agent 2 используйте правильный URL)
+    zabbix_msi_url: "https://cdn.zabbix.com/zabbix/binaries/stable/7.4/{{ zabbix_agent_version }}/zabbix_agent-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
 
   tasks:
-    - name: Install Zabbix Agent 2
-      ansible.builtin.include_role:
-        name: community.zabbix.zabbix_agent
+    - name: Ensure Downloads directory exists
+      ansible.windows.win_file:
+        path: "C:\\Users\\{{ ansible_user }}\\Downloads"
+        state: directory
+
+    - name: Download Zabbix Agent MSI
+      ansible.windows.win_get_url:
+        url: "{{ zabbix_msi_url }}"
+        dest: "C:\\Users\\{{ ansible_user }}\\Downloads\\zabbix_agent-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
+        timeout: 60
+
+    - name: Install Zabbix Agent using win_package
+      ansible.windows.win_package:
+        path: "C:\\Users\\{{ ansible_user }}\\Downloads\\zabbix_agent-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
+        arguments:
+          - "SERVER={{ zabbix_server }}"
+          - "REBOOT=ReallySuppress"
+          - "ALLUSERS=1"
+        state: present
+      register: install_result
+
+    - name: Ensure Zabbix Agent service is running
+      ansible.windows.win_service:
+        name: "Zabbix Agent"
+        state: started
+        start_mode: auto
