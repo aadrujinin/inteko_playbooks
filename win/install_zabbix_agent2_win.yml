@@ -17,7 +17,7 @@
 
   tasks:
     # ----------------------------------------------------------------
-    # Блок очистки старой службы и перезагрузки при необходимости
+    # Блок очистки старой службы с обязательной перезагрузкой
     # ----------------------------------------------------------------
     - name: Check if Zabbix Agent 2 service exists
       ansible.windows.win_service:
@@ -32,7 +32,7 @@
       when: service_info.exists
       ignore_errors: yes
 
-    - name: Attempt to remove service via win_service
+    - name: Remove service using win_service if exists
       ansible.windows.win_service:
         name: "{{ service_name }}"
         state: absent
@@ -44,17 +44,14 @@
       ansible.windows.win_command: 'sc delete "{{ service_name }}"'
       when: 
         - service_info.exists
-        - remove_attempt is failed
+        - remove_attempt is failed or not remove_attempt.changed
       ignore_errors: yes
-      register: sc_delete
 
-    - name: Reboot host if service removal was attempted (to clear pending delete state)
+    - name: Reboot host if service existed (to clear pending delete)
       ansible.windows.win_reboot:
         reboot_timeout: 300
         post_reboot_delay: 30
-      when: 
-        - service_info.exists
-        - (remove_attempt is failed) or (sc_delete is defined and sc_delete.changed)
+      when: service_info.exists
 
     # ----------------------------------------------------------------
     # Основная установка
@@ -107,17 +104,31 @@
       register: script_download
       ignore_errors: yes
 
+    # ----------------------------------------------------------------
+    # Запуск службы (если конфиг или скрипт изменились)
+    # ----------------------------------------------------------------
     - name: Restart Zabbix Agent 2 service if config changed
       ansible.windows.win_service:
         name: "{{ service_name }}"
         state: restarted
-      when: (config_download is defined and config_download.changed) or
-            (script_download is defined and script_download.changed)
+      when: 
+        - (config_download is defined and config_download.changed) or
+          (script_download is defined and script_download.changed)
+      ignore_errors: yes   # если служба ещё не создана – пропускаем
+
+    - name: Ensure Zabbix Agent 2 service is started
+      ansible.windows.win_service:
+        name: "{{ service_name }}"
+        state: started
+        start_mode: auto
+      register: start_result
+      ignore_errors: yes
 
     - name: Check service status
       ansible.windows.win_service:
         name: "{{ service_name }}"
       register: service_status
+      ignore_errors: yes
 
     - name: Show service state
       debug:
