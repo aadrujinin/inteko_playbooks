@@ -104,30 +104,47 @@
         msg: "Install changed: {{ install_result.changed | default('unknown') }}"
 
     # ================================================================
-    # 3. Поиск zabbix_agent2.exe (MSI может ставить в другой путь)
+    # 3. Поиск zabbix_agent2.exe
     # ================================================================
-    - name: Find zabbix_agent2.exe on the system
-      ansible.windows.win_find:
-        paths:
-          - "C:\\Program Files"
-          - "C:\\Program Files (x86)"
-        patterns:
-          - "zabbix_agent2.exe"
-        recurse: yes
-      register: find_result
+    - name: Check default install path
+      ansible.windows.win_stat:
+        path: "{{ agent_dir }}\\zabbix_agent2.exe"
+      register: exe_default
 
-    - name: Debug found exe paths
-      debug:
-        msg: "Found exe: {{ find_result.files | map(attribute='path') | list }}"
+    - name: Check alternative install paths
+      ansible.windows.win_stat:
+        path: "{{ item }}\\zabbix_agent2.exe"
+      register: exe_alt
+      loop:
+        - "C:\\Program Files (x86)\\Zabbix Agent 2"
+        - "C:\\Zabbix Agent 2"
+        - "C:\\Program Files\\Zabbix"
+      when: not exe_default.stat.exists
+      ignore_errors: yes
 
-    - name: Fail if executable not found anywhere
-      fail:
-        msg: "zabbix_agent2.exe not found. Download URL: {{ zabbix_msi_url }}"
-      when: find_result.files | length == 0
-
-    - name: Set agent_dir to found path
+    - name: Set agent_dir from default path
       set_fact:
-        agent_dir: "{{ find_result.files[0].path | dirname }}"
+        agent_dir: "{{ agent_dir }}"
+      when: exe_default.stat.exists
+
+    - name: Set agent_dir from alt path
+      set_fact:
+        agent_dir: "{{ item.item }}"
+      when:
+        - not exe_default.stat.exists
+        - item.stat is defined
+        - item.stat.exists
+      loop: "{{ exe_alt.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Fail if executable not found
+      fail:
+        msg: "zabbix_agent2.exe not found. Searched: {{ agent_dir }}, C:\\Program Files (x86)\\Zabbix Agent 2, C:\\Zabbix Agent 2, C:\\Program Files\\Zabbix"
+      when:
+        - not exe_default.stat.exists
+        - exe_alt.results is defined
+        - exe_alt.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', true) | list | length == 0
 
     # ================================================================
     # 4. Копирование конфигурации и скриптов
