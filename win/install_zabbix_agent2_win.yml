@@ -4,12 +4,11 @@
   gather_facts: true
 
   vars:
-    # Адрес Zabbix-сервера (замените на свой)
-    zabbix_agent_server: "192.168.1.172"          # ← обязательно
-    zabbix_agent_server_active: ""   # если используется активный режим
+    zabbix_agent_server: "192.168.1.172"
+    zabbix_agent_server_active: "192.168.1.172"
     zabbix_agent_hostname: "{{ inventory_hostname }}"
-    zabbix_agent_listenport: 10050
     zabbix_win_config_name: "zabbix_agent2.conf"
+    zabbix_agent_win_install_options: "REBOOT=ReallySuppress"
 
   tasks:
     - name: Install Zabbix Agent 2
