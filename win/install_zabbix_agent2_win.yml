@@ -19,39 +19,39 @@
     # ================================================================
     # 1. Очистка старой службы
     # ================================================================
-    - name: Check if Zabbix Agent 2 service exists
-      ansible.windows.win_service:
-        name: "{{ service_name }}"
-      register: service_info
-      ignore_errors: yes
+    # - name: Check if Zabbix Agent 2 service exists
+      # ansible.windows.win_service:
+        # name: "{{ service_name }}"
+      # register: service_info
+      # ignore_errors: yes
 
-    - name: Stop service if exists
-      ansible.windows.win_service:
-        name: "{{ service_name }}"
-        state: stopped
-      when: service_info.exists
-      ignore_errors: yes
+    # - name: Stop service if exists
+      # ansible.windows.win_service:
+        # name: "{{ service_name }}"
+        # state: stopped
+      # when: service_info.exists
+      # ignore_errors: yes
 
-    - name: Remove service via win_service
-      ansible.windows.win_service:
-        name: "{{ service_name }}"
-        state: absent
-      when: service_info.exists
-      register: remove_attempt
-      ignore_errors: yes
+    # - name: Remove service via win_service
+      # ansible.windows.win_service:
+        # name: "{{ service_name }}"
+        # state: absent
+      # when: service_info.exists
+      # register: remove_attempt
+      # ignore_errors: yes
 
-    - name: Force delete service via sc if needed
-      ansible.windows.win_command: 'sc delete "{{ service_name }}"'
-      when:
-        - service_info.exists
-        - remove_attempt is failed or not remove_attempt.changed
-      ignore_errors: yes
+    # - name: Force delete service via sc if needed
+      # ansible.windows.win_command: 'sc delete "{{ service_name }}"'
+      # when:
+        # - service_info.exists
+        # - remove_attempt is failed or not remove_attempt.changed
+      # ignore_errors: yes
 
-    - name: Reboot if service existed (to clear pending delete)
-      ansible.windows.win_reboot:
-        reboot_timeout: 300
-        post_reboot_delay: 30
-      when: service_info.exists
+    # - name: Reboot if service existed (to clear pending delete)
+      # ansible.windows.win_reboot:
+        # reboot_timeout: 300
+        # post_reboot_delay: 30
+      # when: service_info.exists
 
     # ================================================================
     # 1.5. Очистка EventLog registry key (мешает MSI)
