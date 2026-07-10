@@ -12,13 +12,17 @@
     download_dir: "C:\\Users\\{{ ansible_user }}\\Downloads"
     msi_filename: "zabbix_agent2-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
     msi_full_path: "{{ download_dir }}\\{{ msi_filename }}"
+    agent_dir: "C:\\Program Files\\Zabbix Agent 2"
+    scripts_dir: "C:\\Program Files\\Zabbix Agent 2\\scripts"
 
   tasks:
+    # 1. Создать папку для скачивания
     - name: Ensure Downloads directory exists
       ansible.windows.win_file:
         path: "{{ download_dir }}"
         state: directory
 
+    # 2. Скачать MSI
     - name: Download Zabbix Agent 2 MSI
       ansible.windows.win_get_url:
         url: "{{ zabbix_msi_url }}"
@@ -26,6 +30,7 @@
         timeout: 60
         force: yes
 
+    # 3. Установить MSI (создаст службу)
     - name: Install Zabbix Agent 2 using win_package
       ansible.windows.win_package:
         path: "{{ msi_full_path }}"
@@ -36,22 +41,53 @@
           - "REBOOT=ReallySuppress"
           - "ALLUSERS=1"
         state: present
+      register: install_result
 
-    - name: Ensure Zabbix Agent 2 service is started
-      ansible.windows.win_service:
-        name: "Zabbix Agent 2"
-        state: started
-        start_mode: auto
+    # 4. Создать папку scripts (для метаданных)
+    - name: Ensure scripts directory exists
+      ansible.windows.win_file:
+        path: "{{ scripts_dir }}"
+        state: directory
 
-    - name: Download zabbix_agent2.conf from Git
-      ansible.windows.win_get_url:
-        url: "https://raw.githubusercontent.com/aadrujinin/inteko_playbooks/master/win/Zabbix%20Agent%202/zabbix_agent2.conf"
-        dest: "C:\\Program Files\\Zabbix Agent 2\\zabbix_agent2.conf"
+    # 5. Скопировать zabbix_agent2.conf из репозитория (через локальный файл)
+    #    Предполагается, что файл лежит в win/Zabbix Agent 2/zabbix_agent2.conf
+    #    Если используете win_copy, нужно чтобы файл был в директории files/ относительно плейбука.
+    - name: Copy zabbix_agent2.conf from repository
+      ansible.windows.win_copy:
+        src: "win/Zabbix Agent 2/zabbix_agent2.conf"
+        dest: "{{ agent_dir }}\\zabbix_agent2.conf"
         force: yes
       register: config_download
+      ignore_errors: yes
 
+    # 6. Копируем скрипт get_metadata.bat
+    - name: Copy get_metadata.bat from repository
+      ansible.windows.win_copy:
+        src: "win/Zabbix Agent 2/get_metadata.bat"
+        dest: "{{ scripts_dir }}\\get_metadata.bat"
+        force: yes
+      register: script_download
+      ignore_errors: yes
+
+    # 7. Перезапустить службу, если конфиг или скрипт изменились
     - name: Restart Zabbix Agent 2 service
       ansible.windows.win_service:
         name: "Zabbix Agent 2"
         state: restarted
-      when: config_download.changed
+      when: (config_download is defined and config_download.changed) or
+            (script_download is defined and script_download.changed)
+
+    # 8. Если служба всё ещё не запущена, вывести ошибку
+    - name: Check service status
+      ansible.windows.win_service:
+        name: "Zabbix Agent 2"
+      register: service_status
+
+    - name: Show service state
+      debug:
+        msg: "Service state: {{ service_status.state }}"
+
+    - name: Fail if service is not running
+      fail:
+        msg: "Zabbix Agent 2 service is not running"
+      when: service_status.state != 'running'
