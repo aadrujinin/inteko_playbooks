@@ -11,4 +11,13 @@ all:
           ansible_winrm_transport: basic
           ansible_winrm_server_cert_validation: ignore
           ansible_winrm_scheme: http
+        windows-host-2:
+          ansible_host: 192.168.1.57
+          ansible_user: tech
+          ansible_password: "pass"
+          ansible_connection: winrm
+          ansible_port: 5985
+          ansible_winrm_transport: basic
+          ansible_winrm_server_cert_validation: ignore
+          ansible_winrm_scheme: http
           
