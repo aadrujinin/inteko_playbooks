@@ -8,5 +8,5 @@ all:
           ansible_password: Lhe;byby1985$
           ansible_connection: winrm
           ansible_port: 5985
-          ansible_winrm_transport: ntlm          # попробуйте basic, если ntlm не работает
+          ansible_winrm_transport: basic          # попробуйте basic, если ntlm не работает
           ansible_winrm_server_cert_validation: basic
