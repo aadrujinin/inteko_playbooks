@@ -26,7 +26,7 @@
     zabbix_server: "192.168.1.172"                # IP вашего Zabbix-сервера
     zabbix_agent_version: "7.4.12"                # версия агента
     # URL для скачивания (для Agent 2 используйте правильный URL)
-    zabbix_msi_url: "https://cdn.zabbix.com/zabbix/binaries/stable/7.4/{{ zabbix_agent_version }}/zabbix_agent-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
+    zabbix_msi_url: "https://cdn.zabbix.com/zabbix/binaries/stable/7.4/{{ zabbix_agent_version }}/zabbix_agent2-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
 
   tasks:
     - name: Ensure Downloads directory exists
@@ -37,12 +37,12 @@
     - name: Download Zabbix Agent MSI
       ansible.windows.win_get_url:
         url: "{{ zabbix_msi_url }}"
-        dest: "C:\\Users\\{{ ansible_user }}\\Downloads\\zabbix_agent-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
+        dest: "C:\\Users\\{{ ansible_user }}\\Downloads\\zabbix_agent2-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
         timeout: 60
 
     - name: Install Zabbix Agent using win_package
       ansible.windows.win_package:
-        path: "C:\\Users\\{{ ansible_user }}\\Downloads\\zabbix_agent-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
+        path: "C:\\Users\\{{ ansible_user }}\\Downloads\\zabbix_agent2-{{ zabbix_agent_version }}-windows-amd64-openssl.msi"
         arguments:
           - "SERVER={{ zabbix_server }}"
           - "REBOOT=ReallySuppress"
