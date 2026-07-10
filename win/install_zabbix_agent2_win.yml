@@ -32,43 +32,29 @@
       when: service_info.exists
       ignore_errors: yes
 
-    - name: Attempt to remove service using win_service
+    - name: Attempt to remove service via win_service
       ansible.windows.win_service:
         name: "{{ service_name }}"
         state: absent
       when: service_info.exists
-      register: remove_result
+      register: remove_attempt
       ignore_errors: yes
 
-    - name: If removal failed, force delete via sc command
+    - name: Force delete service using sc command if win_service failed
       ansible.windows.win_command: 'sc delete "{{ service_name }}"'
       when: 
         - service_info.exists
-        - remove_result is failed or remove_result.changed == false
+        - remove_attempt is failed
       ignore_errors: yes
       register: sc_delete
 
-    - name: Check if service is still in pending delete state
-      ansible.windows.win_command: 'sc query "{{ service_name }}"'
-      when: service_info.exists
-      register: sc_query
-      ignore_errors: yes
-
-    - name: Reboot host if service is marked for deletion (Win32 1072)
+    - name: Reboot host if service removal was attempted (to clear pending delete state)
       ansible.windows.win_reboot:
         reboot_timeout: 300
         post_reboot_delay: 30
       when: 
-        - sc_query.stdout is search('1072') or sc_query.stderr is search('1072')
         - service_info.exists
-      register: reboot_done
-
-    - name: Wait for service to be fully gone after reboot
-      ansible.windows.win_service:
-        name: "{{ service_name }}"
-      register: service_after_reboot
-      when: reboot_done.changed
-      ignore_errors: yes
+        - (remove_attempt is failed) or (sc_delete is defined and sc_delete.changed)
 
     # -----------------------------------------------------------------
     # Основная установка
