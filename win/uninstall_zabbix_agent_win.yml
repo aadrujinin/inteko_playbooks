@@ -1,0 +1,69 @@
+---
+- name: Uninstall Zabbix Agents (both versions) from Windows
+  hosts: windows_servers
+  gather_facts: false
+
+  tasks:
+    # 1. Остановка служб (если они существуют)
+    - name: Stop Zabbix Agent 2 service
+      ansible.windows.win_service:
+        name: "Zabbix Agent 2"
+        state: stopped
+      ignore_errors: yes
+
+    - name: Stop Zabbix Agent (old) service
+      ansible.windows.win_service:
+        name: "Zabbix Agent"
+        state: stopped
+      ignore_errors: yes
+
+    # 2. Удаление служб
+    - name: Remove Zabbix Agent 2 service
+      ansible.windows.win_service:
+        name: "Zabbix Agent 2"
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove Zabbix Agent (old) service
+      ansible.windows.win_service:
+        name: "Zabbix Agent"
+        state: absent
+      ignore_errors: yes
+
+    # 3. Удаление каталогов установки
+    - name: Delete Zabbix Agent 2 installation directory
+      ansible.windows.win_file:
+        path: "C:\\Program Files\\Zabbix Agent 2"
+        state: absent
+
+    - name: Delete Zabbix Agent (old) installation directory
+      ansible.windows.win_file:
+        path: "C:\\Program Files\\Zabbix Agent"
+        state: absent
+
+    # 4. Опционально: удалить скачанные MSI-файлы из папки Downloads
+    #    (предполагаем, что пользователь – тот же, что использовался для установки)
+    - name: Remove downloaded MSI files from user Downloads
+      ansible.windows.win_file:
+        path: "C:\\Users\\{{ ansible_user }}\\Downloads\\zabbix_agent*.msi"
+        state: absent
+      ignore_errors: yes
+
+    # 5. Проверка, что службы удалены (для отчёта)
+    - name: Check if Zabbix Agent 2 service still exists
+      ansible.windows.win_service:
+        name: "Zabbix Agent 2"
+      register: service2
+      ignore_errors: yes
+
+    - name: Check if Zabbix Agent (old) service still exists
+      ansible.windows.win_service:
+        name: "Zabbix Agent"
+      register: service1
+      ignore_errors: yes
+
+    - name: Show result
+      debug:
+        msg: |
+          Zabbix Agent 2 service exists: {{ service2.exists | default(false) }}
+          Zabbix Agent (old) service exists: {{ service1.exists | default(false) }}
