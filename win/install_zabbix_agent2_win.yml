@@ -17,7 +17,7 @@
 
   tasks:
     # ----------------------------------------------------------------
-    # Блок очистки старой службы с обязательной перезагрузкой
+    # 1. Очистка старой службы (с перезагрузкой при необходимости)
     # ----------------------------------------------------------------
     - name: Check if Zabbix Agent 2 service exists
       ansible.windows.win_service:
@@ -32,7 +32,7 @@
       when: service_info.exists
       ignore_errors: yes
 
-    - name: Remove service using win_service if exists
+    - name: Remove service via win_service
       ansible.windows.win_service:
         name: "{{ service_name }}"
         state: absent
@@ -40,21 +40,48 @@
       register: remove_attempt
       ignore_errors: yes
 
-    - name: Force delete service using sc command if win_service failed
+    - name: Force delete service via sc if needed
       ansible.windows.win_command: 'sc delete "{{ service_name }}"'
       when: 
         - service_info.exists
         - remove_attempt is failed or not remove_attempt.changed
       ignore_errors: yes
 
-    - name: Reboot host if service existed (to clear pending delete)
+    - name: Reboot if service existed (to clear pending delete)
       ansible.windows.win_reboot:
         reboot_timeout: 300
         post_reboot_delay: 30
       when: service_info.exists
 
     # ----------------------------------------------------------------
-    # Подготовка конфигурации ДО установки
+    # 2. Скачивание и установка MSI
+    # ----------------------------------------------------------------
+    - name: Ensure Downloads directory exists
+      ansible.windows.win_file:
+        path: "{{ download_dir }}"
+        state: directory
+
+    - name: Download Zabbix Agent 2 MSI
+      ansible.windows.win_get_url:
+        url: "{{ zabbix_msi_url }}"
+        dest: "{{ msi_full_path }}"
+        timeout: 60
+        force: yes
+
+    - name: Install Zabbix Agent 2 using win_package
+      ansible.windows.win_package:
+        path: "{{ msi_full_path }}"
+        arguments:
+          - "SERVER={{ zabbix_server }}"
+          - "SERVERACTIVE={{ zabbix_server_active }}"
+          - "HOSTNAME={{ zabbix_hostname }}"
+          - "REBOOT=ReallySuppress"
+          - "ALLUSERS=1"
+        state: present
+      register: install_result
+
+    # ----------------------------------------------------------------
+    # 3. Копирование конфигурации и скриптов (после установки)
     # ----------------------------------------------------------------
     - name: Ensure agent directory exists
       ansible.windows.win_file:
@@ -83,34 +110,20 @@
       ignore_errors: yes
 
     # ----------------------------------------------------------------
-    # Основная установка MSI
+    # 4. Проверка наличия исполняемого файла
     # ----------------------------------------------------------------
-    - name: Ensure Downloads directory exists
-      ansible.windows.win_file:
-        path: "{{ download_dir }}"
-        state: directory
+    - name: Check if zabbix_agent2.exe exists
+      ansible.windows.win_stat:
+        path: "{{ agent_dir }}\\zabbix_agent2.exe"
+      register: exe_stat
 
-    - name: Download Zabbix Agent 2 MSI
-      ansible.windows.win_get_url:
-        url: "{{ zabbix_msi_url }}"
-        dest: "{{ msi_full_path }}"
-        timeout: 60
-        force: yes
-
-    - name: Install Zabbix Agent 2 using win_package
-      ansible.windows.win_package:
-        path: "{{ msi_full_path }}"
-        arguments:
-          - "SERVER={{ zabbix_server }}"
-          - "SERVERACTIVE={{ zabbix_server_active }}"
-          - "HOSTNAME={{ zabbix_hostname }}"
-          - "REBOOT=ReallySuppress"
-          - "ALLUSERS=1"
-        state: present
-      register: install_result
+    - name: Fail if executable not found
+      fail:
+        msg: "zabbix_agent2.exe not found in {{ agent_dir }}. Installation may have failed."
+      when: not exe_stat.stat.exists
 
     # ----------------------------------------------------------------
-    # Проверка и создание службы, если она не появилась
+    # 5. Создание/запуск службы
     # ----------------------------------------------------------------
     - name: Check if service exists after installation
       ansible.windows.win_service:
@@ -123,20 +136,28 @@
         name: "{{ service_name }}"
         path: "{{ agent_dir }}\\zabbix_agent2.exe"
         display_name: "Zabbix Agent 2"
-        state: started
         start_mode: auto
+        state: present
       when: not service_after_install.exists
-      ignore_errors: yes
       register: service_creation
+      ignore_errors: yes
 
-    - name: Ensure service is started (if already exists)
+    - name: Start service (if created or already exists)
       ansible.windows.win_service:
         name: "{{ service_name }}"
         state: started
-        start_mode: auto
-      when: service_after_install.exists
+      when: service_after_install.exists or (service_creation is defined and service_creation.changed)
+      register: start_result
       ignore_errors: yes
 
+    - name: If service failed to start, try via sc command
+      ansible.windows.win_command: 'sc start "{{ service_name }}"'
+      when: start_result is defined and start_result.failed
+      ignore_errors: yes
+
+    # ----------------------------------------------------------------
+    # 6. Финальная проверка
+    # ----------------------------------------------------------------
     - name: Check service status
       ansible.windows.win_service:
         name: "{{ service_name }}"
