@@ -4,24 +4,14 @@
   gather_facts: true
 
   vars:
-    # --- Основные настройки подключения к Zabbix серверу ---
-    zabbix_server_host: "192.168.1.172"
-    zabbix_server_active: ""
-
-    # --- Настройки агента ---
-    zabbix_agent_hostname: "{{ inventory_hostname }}"  # Имя хоста в Zabbix
+    # Адрес Zabbix-сервера (замените на свой)
+    zabbix_agent_server: "192.168.1.172"          # ← обязательно
+    zabbix_agent_server_active: ""   # если используется активный режим
+    zabbix_agent_hostname: "{{ inventory_hostname }}"
     zabbix_agent_listenport: 10050
-
-    # --- Пути установки (стандартные) ---
-    zabbix_win_install_dir: 'C:\Program Files\Zabbix Agent 2'
-    zabbix_win_install_dir_conf: 'C:\Program Files\Zabbix Agent 2\conf'
-
-    # --- Исправление имени конфиг-файла для Agent 2 ---
-    # Важно! В коллекции community.zabbix для Agent 2 используется имя zabbix_agent2.conf, а не zabbix_agentd2.conf[reference:2]
     zabbix_win_config_name: "zabbix_agent2.conf"
-    zabbix2_win_config_name: "zabbix_agent2.conf"
 
   tasks:
-    - name: Include the Zabbix Agent role
+    - name: Install Zabbix Agent 2
       ansible.builtin.include_role:
         name: community.zabbix.zabbix_agent
