@@ -9,6 +9,7 @@
     zabbix_agent_hostname: "{{ inventory_hostname }}"
     zabbix_win_config_name: "zabbix_agent2.conf"
     zabbix_agent_win_install_options: "REBOOT=ReallySuppress"
+    zabbix_agent_win_install_options: "/lv* C:\zabbix_install.log REBOOT=ReallySuppress"
 
   tasks:
     - name: Install Zabbix Agent 2
