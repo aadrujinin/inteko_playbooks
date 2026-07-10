@@ -9,7 +9,6 @@
     zabbix_agent_hostname: "{{ inventory_hostname }}"
     zabbix_win_config_name: "zabbix_agent2.conf"
     # Подавляем запрос перезагрузки
-    zabbix_agent_win_install_options: "REBOOT=ReallySuppress"
     # Для отладки раскомментируйте строку ниже (с одинарными кавычками):
     zabbix_agent_win_install_options: '/lv* C:\zabbix_install.log REBOOT=ReallySuppress'
 
