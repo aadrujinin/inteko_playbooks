@@ -1,5 +1,5 @@
 ---
-- name: Schedule minimize windows every minute
+- name: Schedule minimize windows every minute (working version)
   hosts: windows_servers
   gather_facts: false
 
@@ -9,27 +9,18 @@
     task_password: "Lhe;byby1985$"         # пароль пользователя
 
   tasks:
-    - name: Create scheduled task via PowerShell
+    - name: Remove old task if exists
       ansible.windows.win_shell: |
-        # Удаляем старую задачу, если есть
-        $task = Get-ScheduledTask -TaskName "{{ task_name }}" -ErrorAction SilentlyContinue
-        if ($task) {
-            Unregister-ScheduledTask -TaskName "{{ task_name }}" -Confirm:$false
-        }
+        Unregister-ScheduledTask -TaskName "{{ task_name }}" -Confirm:$false -ErrorAction SilentlyContinue
+      ignore_errors: yes
 
-        # Действие: запуск PowerShell с командой сворачивания всех окон
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -Command `"(New-Object -ComObject Shell.Application).MinimizeAll()`""
-
-        # Триггер: однократный запуск через 1 минуту, с повторением каждую минуту в течение 365 дней
-        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 365)
-
-        # Настройки задачи
+    - name: Create scheduled task with logon trigger and repetition
+      ansible.windows.win_shell: |
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -Command `"(New-Object -ComObject Shell.Application).MinimizeAll()`""
+        $trigger = New-ScheduledTaskTrigger -AtLogOn -User "{{ task_user }}"
+        $trigger.Repetition = New-ScheduledTaskRepetition -Interval (New-TimeSpan -Minutes 1) -Duration (New-TimeSpan -Days 365)
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -Hidden
-
-        # Регистрация задачи
         Register-ScheduledTask -TaskName "{{ task_name }}" -Action $action -Trigger $trigger -Settings $settings -User "{{ task_user }}" -Password "{{ task_password }}" -RunLevel Highest
-
-        # Немедленный запуск для проверки
         Start-ScheduledTask -TaskName "{{ task_name }}"
       register: task_result
       ignore_errors: yes
