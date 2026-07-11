@@ -1,0 +1,7 @@
+- name: Remove scheduled task
+  hosts: windows_servers
+  tasks:
+    - name: Unregister task
+      ansible.windows.win_shell: |
+        Unregister-ScheduledTask -TaskName "MinimizeWindowsEveryMinute" -Confirm:$false
+      ignore_errors: yes
