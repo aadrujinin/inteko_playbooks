@@ -5,8 +5,8 @@
 
   vars:
     task_name: "MinimizeWindowsEveryMinute"
-    task_user: "tech6"                     # замените на вашего пользователя
-    task_password: "Lhe;byby1985$"         # пароль пользователя
+    task_user: "tech3"                     # замените на вашего пользователя
+    task_password: "Ithcnmytd1410*"         # пароль пользователя
 
   tasks:
     - name: Remove old task if exists
