@@ -1,45 +1,39 @@
 ---
-- name: Schedule minimization of all windows every minute
+- name: Schedule minimize windows every minute
   hosts: windows_servers
   gather_facts: false
 
   vars:
     task_name: "MinimizeWindowsEveryMinute"
-    # Пользователь, от имени которого выполняется задача
-    # Должен быть тем же, кто залогинен интерактивно
-    task_user: "{{ ansible_user }}"
-    task_password: "{{ ansible_password }}"
+    task_user: "tech6"                     # замените на вашего пользователя
+    task_password: "Lhe;byby1985$"         # пароль пользователя
 
   tasks:
-    - name: Create scheduled task to minimize windows every minute (using PowerShell)
+    - name: Create scheduled task via PowerShell
       ansible.windows.win_shell: |
-        # Проверяем, существует ли задача
+        # Удаляем старую задачу, если есть
         $task = Get-ScheduledTask -TaskName "{{ task_name }}" -ErrorAction SilentlyContinue
         if ($task) {
-            Write-Host "Task already exists, updating..."
             Unregister-ScheduledTask -TaskName "{{ task_name }}" -Confirm:$false
         }
 
-        # Создаём действие (запуск PowerShell с командой минимизации)
+        # Действие: запуск PowerShell с командой сворачивания всех окон
         $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -Command `"(New-Object -ComObject Shell.Application).MinimizeAll()`""
 
-        # Триггер: каждую минуту, бесконечно
-        $trigger = New-ScheduledTaskTrigger -Daily -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 365)
+        # Триггер: однократный запуск через 1 минуту, с повторением каждую минуту в течение 365 дней
+        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 365)
 
-        # Настройки (запускать, даже если пользователь не залогинен? – нет, нужна интерактивная сессия)
+        # Настройки задачи
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -Hidden
 
-        # Регистрируем задачу от имени текущего пользователя (с паролем)
+        # Регистрация задачи
         Register-ScheduledTask -TaskName "{{ task_name }}" -Action $action -Trigger $trigger -Settings $settings -User "{{ task_user }}" -Password "{{ task_password }}" -RunLevel Highest
 
-        # Запускаем задачу сразу, чтобы проверить
+        # Немедленный запуск для проверки
         Start-ScheduledTask -TaskName "{{ task_name }}"
-      args:
-        executable: powershell.exe
-      register: task_creation
+      register: task_result
       ignore_errors: yes
 
-    - name: Display task creation result
+    - name: Show result
       debug:
-        msg: "Task creation output: {{ task_creation.stdout }}"
-      when: task_creation.stdout is defined
+        msg: "{{ task_result.stdout_lines if task_result.stdout_lines else task_result.stderr_lines }}"
