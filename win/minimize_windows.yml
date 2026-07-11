@@ -1,0 +1,45 @@
+---
+- name: Schedule minimization of all windows every minute
+  hosts: windows_servers
+  gather_facts: false
+
+  vars:
+    task_name: "MinimizeWindowsEveryMinute"
+    # Пользователь, от имени которого выполняется задача
+    # Должен быть тем же, кто залогинен интерактивно
+    task_user: "{{ ansible_user }}"
+    task_password: "{{ ansible_password }}"
+
+  tasks:
+    - name: Create scheduled task to minimize windows every minute (using PowerShell)
+      ansible.windows.win_shell: |
+        # Проверяем, существует ли задача
+        $task = Get-ScheduledTask -TaskName "{{ task_name }}" -ErrorAction SilentlyContinue
+        if ($task) {
+            Write-Host "Task already exists, updating..."
+            Unregister-ScheduledTask -TaskName "{{ task_name }}" -Confirm:$false
+        }
+
+        # Создаём действие (запуск PowerShell с командой минимизации)
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -Command `"(New-Object -ComObject Shell.Application).MinimizeAll()`""
+
+        # Триггер: каждую минуту, бесконечно
+        $trigger = New-ScheduledTaskTrigger -Daily -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 365)
+
+        # Настройки (запускать, даже если пользователь не залогинен? – нет, нужна интерактивная сессия)
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -Hidden
+
+        # Регистрируем задачу от имени текущего пользователя (с паролем)
+        Register-ScheduledTask -TaskName "{{ task_name }}" -Action $action -Trigger $trigger -Settings $settings -User "{{ task_user }}" -Password "{{ task_password }}" -RunLevel Highest
+
+        # Запускаем задачу сразу, чтобы проверить
+        Start-ScheduledTask -TaskName "{{ task_name }}"
+      args:
+        executable: powershell.exe
+      register: task_creation
+      ignore_errors: yes
+
+    - name: Display task creation result
+      debug:
+        msg: "Task creation output: {{ task_creation.stdout }}"
+      when: task_creation.stdout is defined
